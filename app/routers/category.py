@@ -1,8 +1,6 @@
 
 from typing import Annotated
-from sqlalchemy import insert, select, update
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
+from sqlalchemy import insert, select
 from fastapi import APIRouter, status, Depends, HTTPException
 from slugify import slugify
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,9 +38,9 @@ async def update_category(db: Annotated[AsyncSession, Depends(get_db)], category
             status_code=status.HTTP_404_NOT_FOUND,
             detail="There is no category found"
         )
-        category.name = update_category.name,
-        category.slug = slugify(update_category.name),
-        category.parent_id = update_category.parent_id
+    category.name = update_category.name
+    category.slug = slugify(update_category.name)
+    category.parent_id = update_category.parent_id
     await db.commit()
 
     return {

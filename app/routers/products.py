@@ -1,4 +1,6 @@
 from typing import Annotated
+
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 from sqlalchemy import insert, select, update
 from slugify import slugify
@@ -13,13 +15,12 @@ router = APIRouter(prefix="/products", tags=["products"])
 
 
 @router.get("/")
-async def get_all_products(db: Annotated[Session, Depends(get_db)]):
-    products = db.scalars(select(Product).join(Category).where(
+async def get_all_products(db: Annotated[AsyncSession, Depends(get_db)]):
+    products = await db.scalars(select(Product).join(Category).where(
         Product.is_active == True,
         Category.is_active == True,
         Product.stock > 0
     )).all()
-
     if products is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -29,15 +30,15 @@ async def get_all_products(db: Annotated[Session, Depends(get_db)]):
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
-async def create_product(db: Annotated[Session, Depends(get_db)], create_product: CreateProduct):
-    category = db.scalar(select(Category).where(Category.id == create_product.category))
+async def create_product(db: Annotated[AsyncSession, Depends(get_db)], create_product: CreateProduct):
+    category = await db.scalar(select(Category).where(Category.id == create_product.category))
     if category is None:
         HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="There is no category found"
         )
 
-    db.execute(insert(Product).values(
+    await db.execute(insert(Product).values(
         name=create_product.name,
         description=create_product.description,
         price=create_product.price,
@@ -47,7 +48,7 @@ async def create_product(db: Annotated[Session, Depends(get_db)], create_product
         rating=0.0,
         slug=slugify(create_product.name)
     ))
-    db.commit()
+    await db.commit()
     return {
         "status_code": status.HTTP_201_CREATED,
         "transaction": "Successful"
@@ -55,16 +56,16 @@ async def create_product(db: Annotated[Session, Depends(get_db)], create_product
 
 
 @router.get("/{category_slug}")
-async def product_by_category(db: Annotated[Session, Depends(get_db)], category_slug: str):
-    category = db.scalar(select(Category).where(Category.slug == category_slug))
+async def product_by_category(db: Annotated[AsyncSession, Depends(get_db)], category_slug: str):
+    category = await db.scalar(select(Category).where(Category.slug == category_slug))
     if category is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Category not found"
         )
-    subcategories = db.scalars(select(Category).where(Category.parent_id == category.id)).all()
+    subcategories = await db.scalars(select(Category).where(Category.parent_id == category.id)).all()
     cat_and_subcat = [category.id] + [i.id for i in subcategories]
-    products_category = db.scalars(select(Product).where(
+    products_category = await db.scalars(select(Product).where(
         Product.category_id.in_(cat_and_subcat),
         Product.is_active == True,
         Product.stock > 0
@@ -73,8 +74,8 @@ async def product_by_category(db: Annotated[Session, Depends(get_db)], category_
 
 
 @router.get("/detail/{product_slug}")
-async def product_detail(db: Annotated[Session, Depends(get_db)], product_slug: str):
-    product = db.scalar(select(Product).where(Product.slug == product_slug))
+async def product_detail(db: Annotated[AsyncSession, Depends(get_db)], product_slug: str):
+    product = await db.scalar(select(Product).where(Product.slug == product_slug))
     if product is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -84,30 +85,29 @@ async def product_detail(db: Annotated[Session, Depends(get_db)], product_slug: 
 
 
 @router.put("/{product_slug}")
-async def update_product(db: Annotated[Session, Depends(get_db)], product_slug: str, update_product: CreateProduct):
-    product = db.scalar(select(Product).where(Product.slug == product_slug))
+async def update_product(db: Annotated[AsyncSession, Depends(get_db)], product_slug: str, update_product: CreateProduct):
+    product = await db.scalar(select(Product).where(Product.slug == product_slug))
     if product is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="There is no product found"
         )
-    category = db.scalar(select(Category).where(Category.id == update_product.category))
+    category = await db.scalar(select(Category).where(Category.id == update_product.category))
     if category is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="There is no category found"
         )
-    db.execute(update(Product).where(Product.slug == product_slug).values(
-        name=update_product.name,
-        description=update_product.description,
-        price=update_product.price,
-        image_url=update_product.image_url,
-        stock=update_product.stock,
-        category_id=update_product.category,
-        rating=0.0,
-        slug=slugify(update_product.name)
-    ))
-    db.commit()
+    product.name = update_product.name
+    product.description = update_product.description
+    product.price = update_product.price
+    product.image_url = update_product.image_url
+    product.stock = update_product.stock
+    product.category_id = update_product.category
+    product.rating = 0.0
+    product.slug = slugify(update_product.name)
+    await db.commit()
+
     return {
         'status_code': status.HTTP_200_OK,
         'transaction': 'Product update is successful'
@@ -115,15 +115,16 @@ async def update_product(db: Annotated[Session, Depends(get_db)], product_slug: 
 
 
 @router.delete("/{product_slug}")
-async def delete_product(db: Annotated[Session, Depends(get_db)], product_slug: str):
-    product = db.scalar(select(Product).where(Product.slug == product_slug))
+async def delete_product(db: Annotated[AsyncSession, Depends(get_db)], product_slug: str):
+    product = await db.scalar(select(Product).where(Product.slug == product_slug))
     if product is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="There is no product found"
         )
-    db.execute(update(Product).where(Product.slug == product_slug).values(is_active=False))
-    db.commit()
+    product.is_active = False
+    await db.commit()
+
     return {
         "status_code": status.HTTP_200_OK,
         "transaction": "Product delete is successful"
