@@ -1,8 +1,7 @@
 from typing import Annotated
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
-from sqlalchemy import insert, select, update
+from sqlalchemy import insert, select
 from slugify import slugify
 
 from fastapi import APIRouter, status, Depends, HTTPException
@@ -32,8 +31,7 @@ async def get_all_products(db: Annotated[AsyncSession, Depends(get_db)]):
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_product(
-        db: Annotated[AsyncSession,
-        Depends(get_db)],
+        db: Annotated[AsyncSession,Depends(get_db)],
         create_product: CreateProduct,
         get_user: Annotated[dict, Depends(get_current_user)]
 ):
